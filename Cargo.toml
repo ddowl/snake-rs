@@ -1,0 +1,8 @@
+[package]
+name = "snakers"
+version = "0.1.0"
+authors = ["Drew Dowling <drewdowling37@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+cursive = "*"
