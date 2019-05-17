@@ -76,46 +76,32 @@ fn update_snake_coord(view: &mut Canvas<CanvasState>, direction: Direction) {
     let canvas_state = view.state_mut();
     let snake_coord= canvas_state.snake_coord;
 
-    // TODO: This is gross. If coord is going out of bounds, quickly return itself
-    let new_coord: (usize, usize) = match (snake_coord, direction) {
-        (coord, Direction::Up) => {
-            if coord.y > 0 {
-                (coord.x, coord.y - 1)
-            } else {
-                (coord.x, coord.y)
-            }
-        },
-        (coord, Direction::Down) => {
-            if coord.y < CANVAS_SIZE.y - 1 { // -1 to account for Panel padding
-                (coord.x, coord.y + 1)
-            } else {
-                (coord.x, coord.y)
-            }
-        },
-        (coord, Direction::Left) => {
-            if coord.x > 0 {
-                (coord.x - 2, coord.y)
-            } else {
-                (coord.x, coord.y)
-            }
-        },
-        (coord, Direction::Right) => {
-            if coord.x < CANVAS_SIZE.x - 2 { // -2 to account for Panel padding
-                (coord.x + 2, coord.y)
-            } else {
-                (coord.x, coord.y)
-            }
-        }
-    };
-
-    canvas_state.snake_coord = Vec2::from(new_coord);
+    canvas_state.snake_coord = Vec2::from(match direction {
+        Direction::Up => (snake_coord.x, snake_coord.y - 1),
+        Direction::Down => (snake_coord.x, snake_coord.y + 1),
+        Direction::Left => (snake_coord.x - 2, snake_coord.y),
+        Direction::Right => (snake_coord.x + 2, snake_coord.y)
+    });
 
     let curr_state = canvas_state.clone();
+
+    if is_out_of_bounds(curr_state.snake_coord) {
+        // Oh man you did a bad
+        // TODO: transition to endgame state
+    }
+
     view.set_draw(move |_, printer: &Printer| {
         draw_blocks(printer,
                     curr_state.pellet_coord,
                     curr_state.snake_coord)
     });
+}
+
+fn is_out_of_bounds(pos: Vec2) -> bool {
+    // NOTE: since the coordinates are currently represented as Vec2's -> XY<usize>
+    // they can't be negative and these "pos.<x|y> < 0" conditions are redundant
+    // TODO: refactor CanvasState s.t. we can use negative coordinates
+    pos.x < 0 || pos.x >= CANVAS_SIZE.x || pos.y < 0 || pos.y >= CANVAS_SIZE.y
 }
 
 fn draw_blocks(printer: &Printer, pellet_coord: Vec2, snake_coord: Vec2) {
