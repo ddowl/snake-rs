@@ -3,15 +3,12 @@ extern crate lazy_static;
 extern crate cursive;
 extern crate rand;
 
-use cursive::traits::*;
-use cursive::direction;
-use cursive::{Cursive, Printer, theme, event, Vec2};
-use cursive::views::{Canvas, Panel, OnEventView};
-use cursive::theme::{BaseColor, ColorStyle};
 use std::collections::vec_deque::VecDeque;
 use rand::seq::SliceRandom;
-use cursive::views::Dialog;
-use cursive::views::ViewRef;
+use cursive::traits::*;
+use cursive::{Cursive, Printer, theme, direction, event, Vec2, XY};
+use cursive::views::{Canvas, Panel, OnEventView, Dialog, ViewRef};
+use cursive::theme::{BaseColor, ColorStyle};
 
 lazy_static! {
     // it would be nice if we could retrieve the size of the canvas from
@@ -31,14 +28,14 @@ lazy_static! {
 #[derive(Clone)]
 struct CanvasState {
     pellet_coord: Vec2,
-    snake_coords: VecDeque<Vec2>,
+    snake_coords: VecDeque<XY<isize>>,
     last_direction: direction::Absolute,
 }
 
 impl CanvasState {
     pub fn new() -> Self {
-        let mut snake_coords = VecDeque::new();
-        snake_coords.push_front(Vec2::from((0, 1)));
+        let mut snake_coords: VecDeque<XY<isize>> = VecDeque::new();
+        snake_coords.push_front(XY::new(0, 1));
 
         CanvasState {
             pellet_coord: Vec2::from((10, 4)),
@@ -48,11 +45,8 @@ impl CanvasState {
     }
 
     pub fn is_out_of_bounds(&self) -> bool {
-        // NOTE: since the coordinates are currently represented as Vec2's -> XY<usize>
-        // they can't be negative and these "head.<x|y> < 0" conditions are redundant
-        // TODO: refactor CanvasState s.t. we can use negative coordinates
         let head = self.snake_head();
-        head.x < 0 || head.x >= CANVAS_SIZE.x || head.y < 0 || head.y >= CANVAS_SIZE.y
+        head.x < 0 || head.x as usize >= CANVAS_SIZE.x || head.y < 0 || head.y as usize >= CANVAS_SIZE.y
     }
 
     pub fn is_overlapping(&self) -> bool {
@@ -70,7 +64,7 @@ impl CanvasState {
     pub fn update(&mut self, direction: direction::Absolute) {
         let snake_head = self.snake_head();
 
-        let new_head = Vec2::from(match direction {
+        let new_head: XY<isize> = XY::from(match direction {
             direction::Absolute::Up => (snake_head.x, snake_head.y - 1),
             direction::Absolute::Down => (snake_head.x, snake_head.y + 1),
             direction::Absolute::Left => (snake_head.x - 2, snake_head.y),
@@ -81,7 +75,7 @@ impl CanvasState {
         self.last_direction = direction;
         self.snake_coords.push_front(new_head);
 
-        if new_head == self.pellet_coord {
+        if new_head.map(|v| v as usize) == self.pellet_coord {
             // we've reached a pellet!
             // Grow snake size by 1 by not removing the butt, and reset pellet location somewhere else
             self.pellet_coord = self.next_pellet_coord()
@@ -90,7 +84,16 @@ impl CanvasState {
         }
     }
 
-    fn snake_head(&self) -> &Vec2 {
+
+    // returns a vector of snake coordinates in usize
+    // Is there an easier/idiomatic way to map XY<isize> to XY<usize>?
+    pub fn snake_coords(&self) -> Vec<Vec2> {
+        self.snake_coords.iter().map(|xy| {
+            xy.map(|v| v as usize)
+        }).collect()
+    }
+
+    fn snake_head(&self) -> &XY<isize> {
         self.snake_coords.front().expect("Snake should always have a head")
     }
 
@@ -104,7 +107,7 @@ impl CanvasState {
         }
 
         let open_coords: Vec<&Vec2> = canvas_coords.iter().filter(|&coord| {
-            !(self.snake_coords.contains(coord) || self.pellet_coord == *coord)
+            !(self.snake_coords.contains(&coord.map(|v| v as isize)) || self.pellet_coord == *coord)
         }).collect();
 
         **open_coords.choose(&mut rand::thread_rng()).expect("How are there no open spots left OMG")
@@ -120,7 +123,7 @@ fn main() {
         .with_draw(move |_, printer: &Printer| {
             draw_blocks(printer,
                         &curr_state.pellet_coord,
-                        &curr_state.snake_coords);
+                        &curr_state.snake_coords());
         })
         .with_id("canvas")
         .fixed_size(*CANVAS_SIZE);
@@ -158,7 +161,7 @@ fn move_snake(s: &mut Cursive, direction: direction::Absolute) {
         view.set_draw(move |_, printer: &Printer| {
             draw_blocks(printer,
                         &curr_state.pellet_coord,
-                        &curr_state.snake_coords)
+                        &curr_state.snake_coords())
         });
     }
 }
@@ -170,7 +173,7 @@ fn opposite_direction(curr_direction: direction::Absolute, last_direction: direc
     (curr_direction == direction::Absolute::Left && last_direction == direction::Absolute::Right)
 }
 
-fn draw_blocks(printer: &Printer, pellet_coord: &Vec2, snake_coords: &VecDeque<Vec2>) {
+fn draw_blocks(printer: &Printer, pellet_coord: &Vec2, snake_coords: &Vec<Vec2>) {
     printer.with_color(*PELLET_COLOR, |printer| {
         printer.print(pellet_coord, &*BLOCK);
     });
