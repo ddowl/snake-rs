@@ -35,11 +35,7 @@ struct CanvasState {
 }
 
 impl CanvasState {
-    fn snake_head(&self) -> &Vec2 {
-        self.snake_coords.front().expect("Snake should always have a head")
-    }
-
-    fn is_out_of_bounds(&self) -> bool {
+    pub fn is_out_of_bounds(&self) -> bool {
         // NOTE: since the coordinates are currently represented as Vec2's -> XY<usize>
         // they can't be negative and these "head.<x|y> < 0" conditions are redundant
         // TODO: refactor CanvasState s.t. we can use negative coordinates
@@ -47,7 +43,7 @@ impl CanvasState {
         head.x < 0 || head.x >= CANVAS_SIZE.x || head.y < 0 || head.y >= CANVAS_SIZE.y
     }
 
-    fn is_overlapping(&self) -> bool {
+    pub fn is_overlapping(&self) -> bool {
         let head = self.snake_head();
 
         // look at coords excluding head
@@ -57,6 +53,48 @@ impl CanvasState {
             }
         }
         return false
+    }
+
+    pub fn update(&mut self, direction: Direction) {
+        let snake_head = self.snake_head();
+
+        let new_head = Vec2::from(match direction {
+            Direction::Up => (snake_head.x, snake_head.y - 1),
+            Direction::Down => (snake_head.x, snake_head.y + 1),
+            Direction::Left => (snake_head.x - 2, snake_head.y),
+            Direction::Right => (snake_head.x + 2, snake_head.y)
+        });
+
+        self.last_direction = Some(direction);
+        self.snake_coords.push_front(new_head);
+
+        if new_head == self.pellet_coord {
+            // we've reached a pellet!
+            // Grow snake size by 1 by not removing the butt, and reset pellet location somewhere else
+            self.pellet_coord = self.next_pellet_coord()
+        } else {
+            self.snake_coords.pop_back();
+        }
+    }
+
+    fn snake_head(&self) -> &Vec2 {
+        self.snake_coords.front().expect("Snake should always have a head")
+    }
+
+
+    fn next_pellet_coord(&self) -> Vec2 {
+        let mut canvas_coords: Vec<Vec2> = vec![];
+        for x in (0..CANVAS_SIZE.x).step_by(BLOCK.len()) {
+            for y in 0..CANVAS_SIZE.y {
+                canvas_coords.push(Vec2::from((x, y)));
+            }
+        }
+
+        let open_coords: Vec<&Vec2> = canvas_coords.iter().filter(|&coord| {
+            !(self.snake_coords.contains(coord) || self.pellet_coord == *coord)
+        }).collect();
+
+        **open_coords.choose(&mut rand::thread_rng()).expect("How are there no open spots left OMG")
     }
 }
 
@@ -112,7 +150,7 @@ fn move_snake(s: &mut Cursive, direction: Direction) {
         return;
     }
 
-    update_game_state(canvas_state, direction);
+    canvas_state.update(direction);
 
     let curr_state = canvas_state.clone();
     if curr_state.is_out_of_bounds() || curr_state.is_overlapping() {
@@ -128,42 +166,6 @@ fn move_snake(s: &mut Cursive, direction: Direction) {
     }
 }
 
-fn update_game_state(state: &mut CanvasState, direction: Direction) {
-    let snake_head = state.snake_head();
-
-    let new_head = Vec2::from(match direction {
-        Direction::Up => (snake_head.x, snake_head.y - 1),
-        Direction::Down => (snake_head.x, snake_head.y + 1),
-        Direction::Left => (snake_head.x - 2, snake_head.y),
-        Direction::Right => (snake_head.x + 2, snake_head.y)
-    });
-
-    state.last_direction = Some(direction);
-    state.snake_coords.push_front(new_head);
-
-    if new_head == state.pellet_coord {
-        // we've reached a pellet!
-        // Grow snake size by 1 by not removing the butt, and reset pellet location somewhere else
-        state.pellet_coord = next_pellet_coord(&state.pellet_coord, &state.snake_coords)
-    } else {
-        state.snake_coords.pop_back();
-    }
-}
-
-fn next_pellet_coord(pellet_coord: &Vec2, snake_coords: &VecDeque<Vec2>) -> Vec2 {
-    let mut canvas_coords: Vec<Vec2> = vec![];
-    for x in (0..CANVAS_SIZE.x).step_by(BLOCK.len()) {
-        for y in 0..CANVAS_SIZE.y {
-            canvas_coords.push(Vec2::from((x, y)));
-        }
-    }
-
-    let open_coords: Vec<&Vec2> = canvas_coords.iter().filter(|&coord| {
-        !(snake_coords.contains(coord) || pellet_coord == coord)
-    }).collect();
-
-    **open_coords.choose(&mut rand::thread_rng()).expect("How are there no open spots left OMG")
-}
 
 fn opposite_direction(curr_direction: &Direction, last_direction: &Option<Direction>) -> bool {
     match last_direction {
