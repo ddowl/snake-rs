@@ -9,6 +9,8 @@ use cursive::views::{Canvas, Panel, OnEventView};
 use cursive::theme::{BaseColor, ColorStyle};
 use std::collections::vec_deque::VecDeque;
 use rand::seq::SliceRandom;
+use cursive::views::Dialog;
+use cursive::views::ViewRef;
 
 lazy_static! {
     // it would be nice if we could retrieve the size of the canvas from
@@ -35,6 +37,24 @@ struct CanvasState {
 impl CanvasState {
     fn snake_head(&self) -> &Vec2 {
         self.snake_coords.front().expect("Snake should always have a head")
+    }
+
+    fn is_out_of_bounds(&self) -> bool {
+        // NOTE: since the coordinates are currently represented as Vec2's -> XY<usize>
+        // they can't be negative and these "head.<x|y> < 0" conditions are redundant
+        // TODO: refactor CanvasState s.t. we can use negative coordinates
+        let head = self.snake_head();
+        head.x < 0 || head.x >= CANVAS_SIZE.x || head.y < 0 || head.y >= CANVAS_SIZE.y
+    }
+
+    fn is_overlapping(&self) -> bool {
+        let head = self.snake_head();
+        for idx in 1..self.snake_coords.len() {
+            if *head == self.snake_coords[idx] {
+                return true
+            }
+        }
+        return false
     }
 }
 
@@ -82,10 +102,21 @@ fn main() {
 }
 
 fn move_snake(s: &mut Cursive, direction: Direction) {
-    s.call_on_id(
-        "canvas",
-        |view| update_snake_coord(view, direction)
-    );
+    let mut view: ViewRef<Canvas<CanvasState>> = s.find_id("canvas").unwrap();
+    update_snake_coord(&mut view, direction);
+
+    let curr_state = canvas_state.clone();
+    if curr_state.is_out_of_bounds() || curr_state.is_overlapping() {
+        // Oh man you did a bad
+        s.add_layer(Dialog::text("Game Over")
+            .button("Quit", Cursive::quit));
+    } else {
+        view.set_draw(move |_, printer: &Printer| {
+            draw_blocks(printer,
+                        &curr_state.pellet_coord,
+                        &curr_state.snake_coords)
+        });
+    }
 }
 
 fn update_snake_coord(view: &mut Canvas<CanvasState>, direction: Direction) {
@@ -114,19 +145,6 @@ fn update_snake_coord(view: &mut Canvas<CanvasState>, direction: Direction) {
     } else {
         canvas_state.snake_coords.pop_back();
     }
-
-    let curr_state = canvas_state.clone();
-
-    if is_out_of_bounds(curr_state.snake_head()) {
-        // Oh man you did a bad
-        // TODO: transition to endgame state
-    }
-
-    view.set_draw(move |_, printer: &Printer| {
-        draw_blocks(printer,
-                    &curr_state.pellet_coord,
-                    &curr_state.snake_coords)
-    });
 }
 
 fn next_pellet_coord(pellet_coord: &Vec2, snake_coords: &VecDeque<Vec2>) -> Vec2 {
@@ -142,13 +160,6 @@ fn next_pellet_coord(pellet_coord: &Vec2, snake_coords: &VecDeque<Vec2>) -> Vec2
     }).collect();
 
     **open_coords.choose(&mut rand::thread_rng()).expect("How are there no open spots left OMG")
-}
-
-fn is_out_of_bounds(head: &Vec2) -> bool {
-    // NOTE: since the coordinates are currently represented as Vec2's -> XY<usize>
-    // they can't be negative and these "head.<x|y> < 0" conditions are redundant
-    // TODO: refactor CanvasState s.t. we can use negative coordinates
-    head.x < 0 || head.x >= CANVAS_SIZE.x || head.y < 0 || head.y >= CANVAS_SIZE.y
 }
 
 fn opposite_direction(curr_direction: &Direction, last_direction: &Option<Direction>) -> bool {
