@@ -28,7 +28,8 @@ lazy_static! {
 #[derive(Clone)]
 struct CanvasState {
     pellet_coord: Vec2,
-    snake_coords: VecDeque<Vec2>
+    snake_coords: VecDeque<Vec2>,
+    last_direction: Option<Direction>,
 }
 
 impl CanvasState {
@@ -37,6 +38,7 @@ impl CanvasState {
     }
 }
 
+#[derive(Clone, PartialEq)]
 enum Direction {
     Up,
     Down,
@@ -51,7 +53,8 @@ fn main() {
     snake_coords.push_front(Vec2::from((0, 1)));
     let initial_canvas_state = CanvasState {
         pellet_coord: Vec2::from((10, 4)),
-        snake_coords
+        snake_coords,
+        last_direction: None
     };
 
     let curr_state = initial_canvas_state.clone();
@@ -89,6 +92,11 @@ fn update_snake_coord(view: &mut Canvas<CanvasState>, direction: Direction) {
     let canvas_state = view.state_mut();
     let snake_head = canvas_state.snake_head();
 
+    if opposite_direction(&direction, &canvas_state.last_direction) &&
+        canvas_state.snake_coords.len() > 1 {
+        return;
+    }
+
     let new_head = Vec2::from(match direction {
         Direction::Up => (snake_head.x, snake_head.y - 1),
         Direction::Down => (snake_head.x, snake_head.y + 1),
@@ -96,11 +104,12 @@ fn update_snake_coord(view: &mut Canvas<CanvasState>, direction: Direction) {
         Direction::Right => (snake_head.x + 2, snake_head.y)
     });
 
+    canvas_state.last_direction = Some(direction);
     canvas_state.snake_coords.push_front(new_head);
 
     if new_head == canvas_state.pellet_coord {
         // we've reached a pellet!
-        // Grow snake size by 1, and reset pellet location somewhere else
+        // Grow snake size by 1 by not removing the butt, and reset pellet location somewhere else
         canvas_state.pellet_coord = next_pellet_coord(&canvas_state.pellet_coord, &canvas_state.snake_coords)
     } else {
         canvas_state.snake_coords.pop_back();
@@ -120,16 +129,9 @@ fn update_snake_coord(view: &mut Canvas<CanvasState>, direction: Direction) {
     });
 }
 
-fn is_out_of_bounds(head: &Vec2) -> bool {
-    // NOTE: since the coordinates are currently represented as Vec2's -> XY<usize>
-    // they can't be negative and these "head.<x|y> < 0" conditions are redundant
-    // TODO: refactor CanvasState s.t. we can use negative coordinates
-    head.x < 0 || head.x >= CANVAS_SIZE.x || head.y < 0 || head.y >= CANVAS_SIZE.y
-}
-
 fn next_pellet_coord(pellet_coord: &Vec2, snake_coords: &VecDeque<Vec2>) -> Vec2 {
     let mut canvas_coords: Vec<Vec2> = vec![];
-    for x in (0..CANVAS_SIZE.x).step_by(2) {
+    for x in (0..CANVAS_SIZE.x).step_by(BLOCK.len()) {
         for y in 0..CANVAS_SIZE.y {
             canvas_coords.push(Vec2::from((x, y)));
         }
@@ -140,6 +142,26 @@ fn next_pellet_coord(pellet_coord: &Vec2, snake_coords: &VecDeque<Vec2>) -> Vec2
     }).collect();
 
     **open_coords.choose(&mut rand::thread_rng()).expect("How are there no open spots left OMG")
+}
+
+fn is_out_of_bounds(head: &Vec2) -> bool {
+    // NOTE: since the coordinates are currently represented as Vec2's -> XY<usize>
+    // they can't be negative and these "head.<x|y> < 0" conditions are redundant
+    // TODO: refactor CanvasState s.t. we can use negative coordinates
+    head.x < 0 || head.x >= CANVAS_SIZE.x || head.y < 0 || head.y >= CANVAS_SIZE.y
+}
+
+fn opposite_direction(curr_direction: &Direction, last_direction: &Option<Direction>) -> bool {
+    match last_direction {
+        None => false,
+        // Can I use destructuring to make this less gross?
+        Some(ld) => {
+            (*curr_direction == Direction::Up && *ld == Direction::Down) ||
+            (*curr_direction == Direction::Down && *ld == Direction::Up) ||
+            (*curr_direction == Direction::Right && *ld == Direction::Left) ||
+            (*curr_direction == Direction::Left && *ld == Direction::Right)
+        }
+    }
 }
 
 fn draw_blocks(printer: &Printer, pellet_coord: &Vec2, snake_coords: &VecDeque<Vec2>) {
