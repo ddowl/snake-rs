@@ -49,6 +49,8 @@ impl CanvasState {
 
     fn is_overlapping(&self) -> bool {
         let head = self.snake_head();
+
+        // look at coords excluding head
         for idx in 1..self.snake_coords.len() {
             if *head == self.snake_coords[idx] {
                 return true
@@ -103,7 +105,14 @@ fn main() {
 
 fn move_snake(s: &mut Cursive, direction: Direction) {
     let mut view: ViewRef<Canvas<CanvasState>> = s.find_id("canvas").unwrap();
-    update_snake_coord(&mut view, direction);
+    let canvas_state = view.state_mut();
+
+    if opposite_direction(&direction, &canvas_state.last_direction) &&
+        canvas_state.snake_coords.len() > 1 {
+        return;
+    }
+
+    update_game_state(canvas_state, direction);
 
     let curr_state = canvas_state.clone();
     if curr_state.is_out_of_bounds() || curr_state.is_overlapping() {
@@ -119,14 +128,8 @@ fn move_snake(s: &mut Cursive, direction: Direction) {
     }
 }
 
-fn update_snake_coord(view: &mut Canvas<CanvasState>, direction: Direction) {
-    let canvas_state = view.state_mut();
-    let snake_head = canvas_state.snake_head();
-
-    if opposite_direction(&direction, &canvas_state.last_direction) &&
-        canvas_state.snake_coords.len() > 1 {
-        return;
-    }
+fn update_game_state(state: &mut CanvasState, direction: Direction) {
+    let snake_head = state.snake_head();
 
     let new_head = Vec2::from(match direction {
         Direction::Up => (snake_head.x, snake_head.y - 1),
@@ -135,15 +138,15 @@ fn update_snake_coord(view: &mut Canvas<CanvasState>, direction: Direction) {
         Direction::Right => (snake_head.x + 2, snake_head.y)
     });
 
-    canvas_state.last_direction = Some(direction);
-    canvas_state.snake_coords.push_front(new_head);
+    state.last_direction = Some(direction);
+    state.snake_coords.push_front(new_head);
 
-    if new_head == canvas_state.pellet_coord {
+    if new_head == state.pellet_coord {
         // we've reached a pellet!
         // Grow snake size by 1 by not removing the butt, and reset pellet location somewhere else
-        canvas_state.pellet_coord = next_pellet_coord(&canvas_state.pellet_coord, &canvas_state.snake_coords)
+        state.pellet_coord = next_pellet_coord(&state.pellet_coord, &state.snake_coords)
     } else {
-        canvas_state.snake_coords.pop_back();
+        state.snake_coords.pop_back();
     }
 }
 
