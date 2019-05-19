@@ -4,6 +4,7 @@ extern crate cursive;
 extern crate rand;
 
 use cursive::traits::*;
+use cursive::direction;
 use cursive::{Cursive, Printer, theme, event, Vec2};
 use cursive::views::{Canvas, Panel, OnEventView};
 use cursive::theme::{BaseColor, ColorStyle};
@@ -31,7 +32,7 @@ lazy_static! {
 struct CanvasState {
     pellet_coord: Vec2,
     snake_coords: VecDeque<Vec2>,
-    last_direction: Option<Direction>,
+    last_direction: direction::Absolute,
 }
 
 impl CanvasState {
@@ -55,17 +56,18 @@ impl CanvasState {
         return false
     }
 
-    pub fn update(&mut self, direction: Direction) {
+    pub fn update(&mut self, direction: direction::Absolute) {
         let snake_head = self.snake_head();
 
         let new_head = Vec2::from(match direction {
-            Direction::Up => (snake_head.x, snake_head.y - 1),
-            Direction::Down => (snake_head.x, snake_head.y + 1),
-            Direction::Left => (snake_head.x - 2, snake_head.y),
-            Direction::Right => (snake_head.x + 2, snake_head.y)
+            direction::Absolute::Up => (snake_head.x, snake_head.y - 1),
+            direction::Absolute::Down => (snake_head.x, snake_head.y + 1),
+            direction::Absolute::Left => (snake_head.x - 2, snake_head.y),
+            direction::Absolute::Right => (snake_head.x + 2, snake_head.y),
+            direction::Absolute::None => panic!("Can't move in no direction")
         });
 
-        self.last_direction = Some(direction);
+        self.last_direction = direction;
         self.snake_coords.push_front(new_head);
 
         if new_head == self.pellet_coord {
@@ -98,14 +100,6 @@ impl CanvasState {
     }
 }
 
-#[derive(Clone, PartialEq)]
-enum Direction {
-    Up,
-    Down,
-    Left,
-    Right
-}
-
 fn main() {
     let mut siv = Cursive::default();
 
@@ -114,7 +108,7 @@ fn main() {
     let initial_canvas_state = CanvasState {
         pellet_coord: Vec2::from((10, 4)),
         snake_coords,
-        last_direction: None
+        last_direction: direction::Absolute::None
     };
 
     let curr_state = initial_canvas_state.clone();
@@ -133,19 +127,19 @@ fn main() {
             Panel::new(canvas).title("Snake"))
             .on_event('q', |s| s.quit())
             .on_event(event::Key::Esc, |s| s.quit())
-            .on_event(event::Key::Up, |s| move_snake(s, Direction::Up))
-            .on_event(event::Key::Down, |s| move_snake(s, Direction::Down))
-            .on_event(event::Key::Left, |s| move_snake(s, Direction::Left))
-            .on_event(event::Key::Right, |s| move_snake(s, Direction::Right))
+            .on_event(event::Key::Up, |s| move_snake(s, direction::Absolute::Up))
+            .on_event(event::Key::Down, |s| move_snake(s, direction::Absolute::Down))
+            .on_event(event::Key::Left, |s| move_snake(s, direction::Absolute::Left))
+            .on_event(event::Key::Right, |s| move_snake(s, direction::Absolute::Right))
     );
     siv.run();
 }
 
-fn move_snake(s: &mut Cursive, direction: Direction) {
+fn move_snake(s: &mut Cursive, direction: direction::Absolute) {
     let mut view: ViewRef<Canvas<CanvasState>> = s.find_id("canvas").unwrap();
     let canvas_state = view.state_mut();
 
-    if opposite_direction(&direction, &canvas_state.last_direction) &&
+    if opposite_direction(direction, canvas_state.last_direction) &&
         canvas_state.snake_coords.len() > 1 {
         return;
     }
@@ -166,18 +160,11 @@ fn move_snake(s: &mut Cursive, direction: Direction) {
     }
 }
 
-
-fn opposite_direction(curr_direction: &Direction, last_direction: &Option<Direction>) -> bool {
-    match last_direction {
-        None => false,
-        // Can I use destructuring to make this less gross?
-        Some(ld) => {
-            (*curr_direction == Direction::Up && *ld == Direction::Down) ||
-            (*curr_direction == Direction::Down && *ld == Direction::Up) ||
-            (*curr_direction == Direction::Right && *ld == Direction::Left) ||
-            (*curr_direction == Direction::Left && *ld == Direction::Right)
-        }
-    }
+fn opposite_direction(curr_direction: direction::Absolute, last_direction: direction::Absolute) -> bool {
+    (curr_direction == direction::Absolute::Up && last_direction == direction::Absolute::Down) ||
+    (curr_direction == direction::Absolute::Down && last_direction == direction::Absolute::Up) ||
+    (curr_direction == direction::Absolute::Right && last_direction == direction::Absolute::Left) ||
+    (curr_direction == direction::Absolute::Left && last_direction == direction::Absolute::Right)
 }
 
 fn draw_blocks(printer: &Printer, pellet_coord: &Vec2, snake_coords: &VecDeque<Vec2>) {
