@@ -36,6 +36,17 @@ struct CanvasState {
 }
 
 impl CanvasState {
+    pub fn new() -> Self {
+        let mut snake_coords = VecDeque::new();
+        snake_coords.push_front(Vec2::from((0, 1)));
+
+        CanvasState {
+            pellet_coord: Vec2::from((10, 4)),
+            snake_coords,
+            last_direction: direction::Absolute::None
+        }
+    }
+
     pub fn is_out_of_bounds(&self) -> bool {
         // NOTE: since the coordinates are currently represented as Vec2's -> XY<usize>
         // they can't be negative and these "head.<x|y> < 0" conditions are redundant
@@ -103,16 +114,8 @@ impl CanvasState {
 fn main() {
     let mut siv = Cursive::default();
 
-    let mut snake_coords = VecDeque::new();
-    snake_coords.push_front(Vec2::from((0, 1)));
-    let initial_canvas_state = CanvasState {
-        pellet_coord: Vec2::from((10, 4)),
-        snake_coords,
-        last_direction: direction::Absolute::None
-    };
-
+    let initial_canvas_state = CanvasState::new();
     let curr_state = initial_canvas_state.clone();
-
     let canvas = Canvas::new(initial_canvas_state)
         .with_draw(move |_, printer: &Printer| {
             draw_blocks(printer,
