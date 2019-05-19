@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 cursive = "*"
 lazy_static = "*"
+rand = "*"
