@@ -4,6 +4,7 @@ extern crate cursive;
 extern crate rand;
 
 use std::collections::vec_deque::VecDeque;
+use rand::Rng;
 use rand::seq::SliceRandom;
 use cursive::traits::*;
 use cursive::{Cursive, Printer, theme, direction, event, Vec2, XY};
@@ -115,7 +116,7 @@ impl CanvasState {
 }
 
 fn main() {
-    let mut siv = Cursive::default();
+    let mut siv: Cursive = Cursive::default();
 
     let initial_canvas_state = CanvasState::new();
     let curr_state = initial_canvas_state.clone();
@@ -138,6 +139,21 @@ fn main() {
             .on_event(event::Key::Left, |s| move_snake(s, direction::Absolute::Left))
             .on_event(event::Key::Right, |s| move_snake(s, direction::Absolute::Right))
     );
+
+    // Can't get Cursive to call this refresh callback for some reason.
+    siv.add_global_callback(event::Event::Refresh, |s| {
+        s.call_on_id("canvas", |view: &mut Canvas<CanvasState>| {
+            view.set_draw(move |_, printer: &Printer| {
+                draw_blocks(printer,
+                            &XY::new(1, rand::thread_rng().gen_range(0, CANVAS_SIZE.y)),
+                            &vec![XY::new(0, 1)]);
+            });
+        });
+    });
+
+    // Spawn thread to send timed callbacks via "siv.cb_sink"
+    // E.g. `siv.cb_sink().send(Box::new(|s: &mut Cursive| s.quit())).unwrap();`
+
     siv.run();
 }
 
