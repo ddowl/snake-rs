@@ -10,6 +10,8 @@ use cursive::traits::*;
 use cursive::{Cursive, Printer, theme, direction, event, Vec2, XY};
 use cursive::views::{Canvas, Panel, OnEventView, Dialog, ViewRef};
 use cursive::theme::{BaseColor, ColorStyle};
+use std::thread;
+use std::time::Duration;
 
 lazy_static! {
     // it would be nice if we could retrieve the size of the canvas from
@@ -89,9 +91,7 @@ impl CanvasState {
     // returns a vector of snake coordinates in usize
     // Is there an easier/idiomatic way to map XY<isize> to XY<usize>?
     pub fn snake_coords(&self) -> Vec<Vec2> {
-        self.snake_coords.iter().map(|xy| {
-            xy.map(|v| v as usize)
-        }).collect()
+        self.snake_coords.iter().map(|xy| xy.map(|v| v as usize)).collect()
     }
 
     fn snake_head(&self) -> &XY<isize> {
@@ -140,19 +140,23 @@ fn main() {
             .on_event(event::Key::Right, |s| move_snake(s, direction::Absolute::Right))
     );
 
-    // Can't get Cursive to call this refresh callback for some reason.
-    siv.add_global_callback(event::Event::Refresh, |s| {
-        s.call_on_id("canvas", |view: &mut Canvas<CanvasState>| {
-            view.set_draw(move |_, printer: &Printer| {
-                draw_blocks(printer,
-                            &XY::new(1, rand::thread_rng().gen_range(0, CANVAS_SIZE.y)),
-                            &vec![XY::new(0, 1)]);
-            });
-        });
+    let cb_sink = siv.cb_sink().clone();
+
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_millis(1000));
+            cb_sink.send(Box::new(|s: &mut Cursive| {
+                let mut view: ViewRef<Canvas<CanvasState>> = s.find_id("canvas").unwrap();
+                view.set_draw(move |_, printer: &Printer| {
+                    draw_blocks(printer,
+                                &XY::new(1, rand::thread_rng().gen_range(0, CANVAS_SIZE.y)),
+                                &vec![XY::new(0, 1)]);
+                });
+            })).unwrap();
+        }
     });
 
-    // Spawn thread to send timed callbacks via "siv.cb_sink"
-    // E.g. `siv.cb_sink().send(Box::new(|s: &mut Cursive| s.quit())).unwrap();`
+    siv.set_fps(2);
 
     siv.run();
 }
