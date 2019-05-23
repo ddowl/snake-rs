@@ -4,7 +4,6 @@ extern crate cursive;
 extern crate rand;
 
 use std::collections::vec_deque::VecDeque;
-use rand::Rng;
 use rand::seq::SliceRandom;
 use cursive::traits::*;
 use cursive::{Cursive, Printer, theme, direction, event, Vec2, XY};
@@ -32,7 +31,7 @@ lazy_static! {
 struct CanvasState {
     pellet_coord: Vec2,
     snake_coords: VecDeque<XY<isize>>,
-    last_direction: direction::Absolute,
+    direction: direction::Absolute,
 }
 
 impl CanvasState {
@@ -43,7 +42,7 @@ impl CanvasState {
         CanvasState {
             pellet_coord: Vec2::from((10, 4)),
             snake_coords,
-            last_direction: direction::Absolute::None
+            direction: direction::Absolute::None
         }
     }
 
@@ -64,18 +63,17 @@ impl CanvasState {
         return false
     }
 
-    pub fn update(&mut self, direction: direction::Absolute) {
+    pub fn tick(&mut self) {
         let snake_head = self.snake_head();
 
-        let new_head: XY<isize> = XY::from(match direction {
+        let new_head: XY<isize> = XY::from(match self.direction {
             direction::Absolute::Up => (snake_head.x, snake_head.y - 1),
             direction::Absolute::Down => (snake_head.x, snake_head.y + 1),
             direction::Absolute::Left => (snake_head.x - 2, snake_head.y),
             direction::Absolute::Right => (snake_head.x + 2, snake_head.y),
-            direction::Absolute::None => panic!("Can't move in no direction")
+            direction::Absolute::None => (snake_head.x, snake_head.y)
         });
 
-        self.last_direction = direction;
         self.snake_coords.push_front(new_head);
 
         if new_head.map(|v| v as usize) == self.pellet_coord {
@@ -88,8 +86,7 @@ impl CanvasState {
     }
 
 
-    // returns a vector of snake coordinates in usize
-    // Is there an easier/idiomatic way to map XY<isize> to XY<usize>?
+    // returns a vector of snake coordinates in usize for Cursive
     pub fn snake_coords(&self) -> Vec<Vec2> {
         self.snake_coords.iter().map(|xy| xy.map(|v| v as usize)).collect()
     }
@@ -134,43 +131,31 @@ fn main() {
             Panel::new(canvas).title("Snake"))
             .on_event('q', |s| s.quit())
             .on_event(event::Key::Esc, |s| s.quit())
-            .on_event(event::Key::Up, |s| move_snake(s, direction::Absolute::Up))
-            .on_event(event::Key::Down, |s| move_snake(s, direction::Absolute::Down))
-            .on_event(event::Key::Left, |s| move_snake(s, direction::Absolute::Left))
-            .on_event(event::Key::Right, |s| move_snake(s, direction::Absolute::Right))
+            .on_event(event::Key::Up, |s| set_snake_direction(s, direction::Absolute::Up))
+            .on_event(event::Key::Down, |s| set_snake_direction(s, direction::Absolute::Down))
+            .on_event(event::Key::Left, |s| set_snake_direction(s, direction::Absolute::Left))
+            .on_event(event::Key::Right, |s| set_snake_direction(s, direction::Absolute::Right))
     );
 
     let cb_sink = siv.cb_sink().clone();
 
     thread::spawn(move || {
         loop {
-            thread::sleep(Duration::from_millis(1000));
-            cb_sink.send(Box::new(|s: &mut Cursive| {
-                let mut view: ViewRef<Canvas<CanvasState>> = s.find_id("canvas").unwrap();
-                view.set_draw(move |_, printer: &Printer| {
-                    draw_blocks(printer,
-                                &XY::new(1, rand::thread_rng().gen_range(0, CANVAS_SIZE.y)),
-                                &vec![XY::new(0, 1)]);
-                });
-            })).unwrap();
+            thread::sleep(Duration::from_millis(100));
+            cb_sink.send(Box::new(|s: &mut Cursive| move_snake(s))).unwrap();
         }
     });
 
-    siv.set_fps(2);
+    siv.set_autorefresh(true);
 
     siv.run();
 }
 
-fn move_snake(s: &mut Cursive, direction: direction::Absolute) {
+fn move_snake(s: &mut Cursive) {
     let mut view: ViewRef<Canvas<CanvasState>> = s.find_id("canvas").unwrap();
     let canvas_state = view.state_mut();
 
-    if opposite_direction(direction, canvas_state.last_direction) &&
-        canvas_state.snake_coords.len() > 1 {
-        return;
-    }
-
-    canvas_state.update(direction);
+    canvas_state.tick();
 
     let curr_state = canvas_state.clone();
     if curr_state.is_out_of_bounds() || curr_state.is_overlapping() {
@@ -183,6 +168,15 @@ fn move_snake(s: &mut Cursive, direction: direction::Absolute) {
                         &curr_state.pellet_coord,
                         &curr_state.snake_coords())
         });
+    }
+}
+
+fn set_snake_direction(s: &mut Cursive, direction: direction::Absolute) {
+    let mut view: ViewRef<Canvas<CanvasState>> = s.find_id("canvas").unwrap();
+    let canvas_state = view.state_mut();
+
+    if !opposite_direction(direction, canvas_state.direction) || canvas_state.snake_coords.is_empty() {
+        canvas_state.direction = direction;
     }
 }
 
